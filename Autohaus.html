@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fresh Cars - Autohaus MDT</title>
+    
+    <!-- Firebase SDK (Version 8) für Echtzeit-Synchronisation -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0a0a0c;
+            --sidebar-bg: #111116;
+            --card-bg: rgba(18, 18, 22, 0.95);
+            --primary-red: #ff1e27;
+            --red-glow: rgba(255, 30, 39, 0.4);
+            --text-color: #f0f0f0;
+            --border-color: #2a2a32;
+            --input-bg: #16161c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            background-image: radial-gradient(circle at 60% 50%, rgba(255, 30, 39, 0.05) 0%, transparent 80%);
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            width: 280px;
+            background-color: var(--sidebar-bg);
+            border-right: 2px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+        }
+
+        .brand-header {
+            padding: 24px 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--primary-red);
+            box-shadow: 0 4px 15px rgba(255, 30, 39, 0.15);
+        }
+
+        .brand-header h1 {
+            font-size: 26px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+            text-shadow: 0 0 10px var(--primary-red);
+        }
+
+        .brand-header span {
+            font-size: 11px;
+            color: #888;
+            letter-spacing: 3px;
+            display: block;
+            margin-top: 4px;
+        }
+
+        .category-list {
+            list-style: none;
+            overflow-y: auto;
+            flex: 1;
+            padding: 10px 0;
+        }
+
+        .category-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .category-list::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        .category-item {
+            padding: 14px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #aaa;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-left: 4px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .category-item:hover {
+            color: #fff;
+            background: rgba(255, 30, 39, 0.08);
+        }
+
+        .category-item.active {
+            color: #fff;
+            background: rgba(255, 30, 39, 0.15);
+            border-left-color: var(--primary-red);
+            text-shadow: 0 0 8px var(--red-glow);
+        }
+
+        /* Main Content Grid */
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content-header {
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        .content-header h2 {
+            font-size: 22px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--primary-red);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        /* LIVE UHR DESIGN */
+        .live-clock-box {
+            background: #121216;
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            border-radius: 6px;
+            text-align: right;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .live-clock-time {
+            font-size: 16px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 1px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .live-clock-date {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-badge {
+            font-size: 11px;
+            color: #888;
+            letter-spacing: 1px;
+        }
+
+        .btn-login {
+            background: #16161c;
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+        }
+
+        .btn-login:hover {
+            border-color: var(--primary-red);
+            box-shadow: 0 0 8px var(--red-glow);
+        }
+
+        .btn-login.logged-in {
+            background: rgba(255, 30, 39, 0.15);
+            border-color: var(--primary-red);
+            color: var(--primary-red);
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 30px;
+            padding-bottom: 40px;
+        }
+
+        /* Card 3D Flip System */
+        .scene {
+            height: 640px;
+            perspective: 1200px;
+        }
+
+        .card {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .scene:hover .card-face {
+            border-color: rgba(255, 30, 39, 0.5);
+            box-shadow: 0 0 15px var(--red-glow);
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #fff;
+            margin-bottom: 12px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        /* Image Box */
+        .image-container {
+            width: 100%;
+            height: 180px;
+            border: 2px dashed #333;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+            background: #0d0d10;
+            transition: border-color 0.3s;
+            margin-bottom: 12px;
+        }
+
+        .image-container.editable {
+            cursor: pointer;
+        }
+
+        .image-container.editable:hover, .image-container.editable.dragover {
+            border-color: var(--primary-red);
+        }
+
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .image-placeholder {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            padding: 10px;
+            line-height: 1.4;
+        }
+
+        /* Form Controls */
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            flex: 1;
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 4px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 8px 10px;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:disabled, input[readonly] {
+            opacity: 0.7;
+            cursor: not-allowed;
+            background: #111;
+        }
+
+        input:focus:not(:disabled), select:focus:not(:disabled) {
+            border-color: var(--primary-red);
+            box-shadow: 0 0 6px var(--red-glow);
+        }
+
+        .price-input {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--primary-red);
+            text-align: center;
+        }
+
+        .btn-flip {
+            background: linear-gradient(135deg, #b30000, var(--primary-red));
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 2px 8px var(--red-glow);
+            transition: transform 0.2s, background 0.3s;
+            margin-top: 5px;
+        }
+
+        .btn-flip:hover {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, var(--primary-red), #ff4d4d);
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .modal {
+            background: var(--sidebar-bg);
+            border: 2px solid var(--border-color);
+            padding: 30px;
+            border-radius: 12px;
+            width: 340px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
+
+        .modal h3 {
+            text-transform: uppercase;
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #fff;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-submit {
+            background: var(--primary-red);
+            color: #fff; border: none; padding: 10px;
+            border-radius: 6px; font-weight: bold; flex: 1;
+            cursor: pointer; text-transform: uppercase; font-size: 12px;
+        }
+
+        .btn-cancel {
+            background: #333;
+            color: #fff; border: none; padding: 10px;
+            border-radius: 6px; font-weight: bold; flex: 1;
+            cursor: pointer; text-transform: uppercase; font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar Navigation -->
+    <div class="sidebar">
+        <div class="brand-header">
+            <h1>Fresh Cars</h1>
+            <span>AUTOHAUS MDT</span>
+        </div>
+        <ul class="category-list" id="categoryList"></ul>
+    </div>
+
+    <!-- Hauptbereich -->
+    <div class="main-content">
+        <div class="content-header">
+            <h2 id="currentCategoryTitle">Kategorie</h2>
+            
+            <div class="header-actions">
+                <!-- LIVE UHR -->
+                <div class="live-clock-box">
+                    <div class="live-clock-time" id="clockTime">00:00:00</div>
+                    <div class="live-clock-date" id="clockDate">00.00.0000</div>
+                </div>
+
+                <span class="status-badge" id="statusBadge">Modus: Nur Ansicht</span>
+                <button class="btn-login" id="loginBtn" onclick="openLoginModal()">Anmeldung</button>
+            </div>
+        </div>
+
+        <div class="cards-grid" id="cardsGrid"></div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <h3>Autohaus Login</h3>
+            <div class="form-group">
+                <label>Benutzer</label>
+                <input type="text" id="userInput" placeholder="Benutzername">
+            </div>
+            <div class="form-group">
+                <label>Passwort</label>
+                <input type="password" id="passInput" placeholder="Passwort">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" onclick="closeLoginModal()">Abbrechen</button>
+                <button class="btn-submit" onclick="handleLogin()">Einloggen</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // -------------------------------------------------------------
+    // 1. DEINE PERSONALISIERTEN FIREBASE ZUGANGSDATEN
+    // -------------------------------------------------------------
+    const firebaseConfig = {
+        apiKey: "AIzaSyC6CzBYV1CpHHgc1fjl9JL08z2kWqesEgA",
+        authDomain: "freshcarsmdt.firebaseapp.com",
+        databaseURL: "https://freshcarsmdt-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "freshcarsmdt",
+        storageBucket: "freshcarsmdt.firebasestorage.app",
+        messagingSenderId: "37931742621",
+        appId: "1:37931742621:web:db45cd282e8e12a5cd2b74",
+        measurementId: "G-GG6TZ2ZG01"
+    };
+
+    let useLiveFirebase = false;
+    let dbRef = null;
+
+    // Firebase initialisieren
+    try {
+        firebase.initializeApp(firebaseConfig);
+        dbRef = firebase.database().ref('fresh_cars_mdt');
+        useLiveFirebase = true;
+    } catch(e) {
+        console.warn("Firebase-Verbindung schlug fehl, benutze lokalen Speicher.", e);
+    }
+
+    // -------------------------------------------------------------
+    // 2. LIVE-UHR SCRIPT
+    // -------------------------------------------------------------
+    function updateClock() {
+        const now = new Date();
+        const hrs = String(now.getHours()).padStart(2, '0');
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        const secs = String(now.getSeconds()).padStart(2, '0');
+        
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+
+        document.getElementById('clockTime').innerText = `${hrs}:${mins}:${secs}`;
+        document.getElementById('clockDate').innerText = `${day}.${month}.${year}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // -------------------------------------------------------------
+    // 3. ANWENDUNGSDATEN & KATEGORIEN
+    // -------------------------------------------------------------
+    const categories = [
+        "Kompaktwagen", "Klassiker", "Sportwagen", "Supersportwagen", 
+        "Hypercars", "SUVs", "Offroad", "Limousinen", "Coupés", 
+        "Muscle Cars", "Tuner", "Vans & Transporter", "Motorräder", 
+        "Nutzfahrzeuge", "Einsatzfahrzeuge"
+    ];
+
+    let currentCategoryIndex = 0;
+    let activeCardForPaste = null;
+    let isLoggedIn = false;
+
+    const STORAGE_KEY = 'fresh_cars_mdt_data';
+    let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+
+    // Live-Listener: Sobald jemand etwas ändert, wird es bei JEDEM sofort aktualisiert!
+    if (useLiveFirebase && dbRef) {
+        dbRef.on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val) {
+                appData = val;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+                renderCards();
+            }
+        });
+    }
+
+    function initCategories() {
+        const listEl = document.getElementById('categoryList');
+        listEl.innerHTML = '';
+        
+        categories.forEach((cat, index) => {
+            const li = document.createElement('li');
+            li.className = `category-item ${index === 0 ? 'active' : ''}`;
+            li.innerText = cat;
+            li.onclick = () => selectCategory(index);
+            listEl.appendChild(li);
+        });
+
+        selectCategory(0);
+    }
+
+    function selectCategory(index) {
+        currentCategoryIndex = index;
+        document.querySelectorAll('.category-item').forEach((item, i) => {
+            item.classList.toggle('active', i === index);
+        });
+
+        document.getElementById('currentCategoryTitle').innerText = categories[index];
+        renderCards();
+    }
+
+    function renderCards() {
+        const grid = document.getElementById('cardsGrid');
+        grid.innerHTML = '';
+
+        const catName = categories[currentCategoryIndex];
+        if (!appData[catName]) {
+            appData[catName] = Array(15).fill(null).map(() => ({}));
+        }
+
+        for (let i = 0; i < 15; i++) {
+            const cardData = appData[catName][i] || {};
+            const scene = document.createElement('div');
+            scene.className = 'scene';
+
+            const readonlyAttr = isLoggedIn ? '' : 'disabled';
+            const editableClass = isLoggedIn ? 'editable' : '';
+            const clickAction = isLoggedIn ? `activeCardForPaste=${i}; document.getElementById('file-${i}').click()` : '';
+            const mouseOverAction = isLoggedIn ? `activeCardForPaste=${i}` : '';
+
+            scene.innerHTML = `
+                <div class="card" id="card-${i}">
+                    <!-- VORDERSEITE -->
+                    <div class="card-face card-front">
+                        <div>
+                            <div class="card-title">Slot #${i + 1} — ${catName}</div>
+
+                            <div class="image-container ${editableClass}" id="dropZone-${i}" 
+                                 onclick="${clickAction}"
+                                 onmouseover="${mouseOverAction}">
+                                <div class="image-placeholder" id="placeholder-${i}" style="${cardData.img ? 'display:none;' : ''}">
+                                    <strong>${isLoggedIn ? 'Bild einfügen' : 'Kein Bild hinterlegt'}</strong><br>
+                                    ${isLoggedIn ? 'Strg+V / Drag&Drop / Klick' : 'Nur im eingeloggten Modus änderbar'}
+                                </div>
+                                <img id="img-${i}" src="${cardData.img || ''}" style="${cardData.img ? 'display:block;' : 'display:none;'}">
+                            </div>
+                            <input type="file" id="file-${i}" class="file-input" accept="image/*" onchange="handleFileSelect(event, ${i})">
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Hersteller</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.brand || ''}" placeholder="-" onchange="updateData(${i}, 'brand', this.value)">
+                                </div>
+                                <div class="form-group">
+                                    <label>Modell</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.model || ''}" placeholder="-" onchange="updateData(${i}, 'model', this.value)">
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Sitzplätze</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.seats || ''}" placeholder="-" onchange="updateData(${i}, 'seats', this.value)">
+                                </div>
+                                <div class="form-group">
+                                    <label>Verkaufspreis ($)</label>
+                                    <input type="text" ${readonlyAttr} class="price-input" value="${cardData.price || ''}" placeholder="$ 0" onchange="updateData(${i}, 'price', this.value)">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn-flip" onclick="toggleFlip(${i})">Fahrzeugdetails ➔</button>
+                    </div>
+
+                    <!-- RÜCKSEITE -->
+                    <div class="card-face card-back">
+                        <div>
+                            <div class="card-title">Spezifikationen</div>
+
+                            <div class="form-group">
+                                <label>Kilometerstand (KM)</label>
+                                <input type="text" ${readonlyAttr} value="${cardData.km || ''}" placeholder="-" onchange="updateData(${i}, 'km', this.value)">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Kofferraumvolumen (KG)</label>
+                                <input type="text" ${readonlyAttr} value="${cardData.trunk || ''}" placeholder="-" onchange="updateData(${i}, 'trunk', this.value)">
+                            </div>
+
+                            <div class="form-group">
+                                <label>Höchstgeschwindigkeit</label>
+                                <input type="text" ${readonlyAttr} value="${cardData.speed || ''}" placeholder="-" onchange="updateData(${i}, 'speed', this.value)">
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Baujahr</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.year || ''}" placeholder="-" onchange="updateData(${i}, 'year', this.value)">
+                                </div>
+                                <div class="form-group">
+                                    <label>Antrieb</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.drive || ''}" placeholder="-" onchange="updateData(${i}, 'drive', this.value)">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Kraftstoff / Motor</label>
+                                <input type="text" ${readonlyAttr} value="${cardData.fuel || ''}" placeholder="-" onchange="updateData(${i}, 'fuel', this.value)">
+                            </div>
+                        </div>
+
+                        <button class="btn-flip" onclick="toggleFlip(${i})">➔ Zurück zur Übersicht</button>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(scene);
+            if (isLoggedIn) setupDragAndDrop(i);
+        }
+    }
+
+    function toggleFlip(index) {
+        document.getElementById(`card-${index}`).classList.toggle('is-flipped');
+    }
+
+    // Speichert Daten lokal und überträgt sie live an die Datenbank für alle Nutzer
+    function updateData(index, key, value) {
+        if (!isLoggedIn) return;
+        const catName = categories[currentCategoryIndex];
+        if (!appData[catName][index]) appData[catName][index] = {};
+        appData[catName][index][key] = value;
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+
+        if (useLiveFirebase && dbRef) {
+            dbRef.set(appData);
+        }
+    }
+
+    function setCardImage(index, base64) {
+        if (!isLoggedIn) return;
+        const img = document.getElementById(`img-${index}`);
+        const placeholder = document.getElementById(`placeholder-${index}`);
+        img.src = base64;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+        updateData(index, 'img', base64);
+    }
+
+    document.addEventListener('paste', (e) => {
+        if (!isLoggedIn || activeCardForPaste === null) return;
+        const items = e.clipboardData.items;
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const blob = item.getAsFile();
+                const reader = new FileReader();
+                reader.onload = (event) => setCardImage(activeCardForPaste, event.target.result);
+                reader.readAsDataURL(blob);
+            }
+        }
+    });
+
+    function handleFileSelect(e, index) {
+        if (!isLoggedIn) return;
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => setCardImage(index, event.target.result);
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function setupDragAndDrop(index) {
+        setTimeout(() => {
+            const zone = document.getElementById(`dropZone-${index}`);
+            if (!zone) return;
+
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+
+            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (!isLoggedIn) return;
+                const file = e.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => setCardImage(index, event.target.result);
+                    reader.readAsDataURL(file);
+                }
+            });
+        }, 50);
+    }
+
+    function openLoginModal() {
+        if (isLoggedIn) {
+            isLoggedIn = false;
+            document.getElementById('loginBtn').innerText = 'Anmeldung';
+            document.getElementById('loginBtn').classList.remove('logged-in');
+            document.getElementById('statusBadge').innerText = 'Modus: Nur Ansicht';
+            renderCards();
+            return;
+        }
+        document.getElementById('loginModal').style.display = 'flex';
+    }
+
+    function closeLoginModal() {
+        document.getElementById('loginModal').style.display = 'none';
+        document.getElementById('userInput').value = '';
+        document.getElementById('passInput').value = '';
+    }
+
+    function handleLogin() {
+        const user = document.getElementById('userInput').value;
+        const pass = document.getElementById('passInput').value;
+
+        if (user === 'Autohaus' && pass === 'Autohaus1234') {
+            isLoggedIn = true;
+            document.getElementById('loginBtn').innerText = 'Abmelden (Autohaus)';
+            document.getElementById('loginBtn').classList.add('logged-in');
+            document.getElementById('statusBadge').innerText = 'Modus: Bearbeitung aktiv';
+            closeLoginModal();
+            renderCards();
+        } else {
+            alert('Falscher Benutzername oder falsches Passwort!');
+        }
+    }
+
+    initCategories();
+</script>
+
+</body>
+</html>
