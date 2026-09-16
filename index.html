@@ -1,333 +1,754 @@
-<script>
-    // -------------------------------------------------------------
-    // 1. DEINE PERSONALISIERTEN FIREBASE ZUGANGSDATEN
-    // -------------------------------------------------------------
-    const firebaseConfig = {
-        apiKey: "AIzaSyC6CzBYV1CpHHgc1fjl9JL08z2kWqesEgA",
-        authDomain: "freshcarsmdt.firebaseapp.com",
-        databaseURL: "https://freshcarsmdt-default-rtdb.europe-west1.firebasedatabase.app",
-        projectId: "freshcarsmdt",
-        storageBucket: "freshcarsmdt.firebasestorage.app",
-        messagingSenderId: "37931742621",
-        appId: "1:37931742621:web:db45cd282e8e12a5cd2b74",
-        measurementId: "G-GG6TZ2ZG01"
-    };
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fresh Cars - Autohaus MDT</title>
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
-    let useLiveFirebase = false;
-    let dbRef = null;
-
-    // Firebase initialisieren
-    try {
-        firebase.initializeApp(firebaseConfig);
-        dbRef = firebase.database().ref('fresh_cars_mdt');
-        useLiveFirebase = true;
-    } catch(e) {
-        console.warn("Firebase-Verbindung schlug fehl, benutze lokalen Speicher.", e);
-    }
-
-    // -------------------------------------------------------------
-    // 2. LIVE-UHR SCRIPT
-    // -------------------------------------------------------------
-    function updateClock() {
-        const now = new Date();
-        const hrs = String(now.getHours()).padStart(2, '0');
-        const mins = String(now.getMinutes()).padStart(2, '0');
-        const secs = String(now.getSeconds()).padStart(2, '0');
-        
-        const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const year = now.getFullYear();
-
-        document.getElementById('clockTime').innerText = `${hrs}:${mins}:${secs}`;
-        document.getElementById('clockDate').innerText = `${day}.${month}.${year}`;
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    // -------------------------------------------------------------
-    // 3. ANWENDUNGSDATEN & KATEGORIEN
-    // -------------------------------------------------------------
-    const categories = [
-        "Kompaktwagen", "Klassiker", "Sportwagen", "Supersportwagen", 
-        "Hypercars", "SUVs", "Offroad", "Limousinen", "Coupés", 
-        "Muscle Cars", "Tuner", "Vans & Transporter", "Motorräder", 
-        "Nutzfahrzeuge", "Einsatzfahrzeuge"
-    ];
-
-    let currentCategoryIndex = 0;
-    let activeCardForPaste = null;
-    let isLoggedIn = false;
-
-    const STORAGE_KEY = 'fresh_cars_mdt_data';
-    let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
-
-    // Live-Listener: Sobald jemand etwas ändert, wird es bei JEDEM sofort aktualisiert!
-    if (useLiveFirebase && dbRef) {
-        dbRef.on('value', (snapshot) => {
-            const val = snapshot.val();
-            if (val) {
-                appData = val;
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
-                renderCards();
-            }
-        });
-    }
-
-    function initCategories() {
-        const listEl = document.getElementById('categoryList');
-        listEl.innerHTML = '';
-        
-        categories.forEach((cat, index) => {
-            const li = document.createElement('li');
-            li.className = `category-item ${index === 0 ? 'active' : ''}`;
-            li.innerText = cat;
-            li.onclick = () => selectCategory(index);
-            listEl.appendChild(li);
-        });
-
-        selectCategory(0);
-    }
-
-    function selectCategory(index) {
-        currentCategoryIndex = index;
-        document.querySelectorAll('.category-item').forEach((item, i) => {
-            item.classList.toggle('active', i === index);
-        });
-
-        document.getElementById('currentCategoryTitle').innerText = categories[index];
-        renderCards();
-    }
-
-    function renderCards() {
-        const grid = document.getElementById('cardsGrid');
-        grid.innerHTML = '';
-
-        const catName = categories[currentCategoryIndex];
-        if (!appData[catName]) {
-            appData[catName] = Array(15).fill(null).map(() => ({}));
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
-        for (let i = 0; i < 15; i++) {
-            const cardData = appData[catName][i] || {};
-            const scene = document.createElement('div');
-            scene.className = 'scene';
-
-            const readonlyAttr = isLoggedIn ? '' : 'disabled';
-            const editableClass = isLoggedIn ? 'editable' : '';
-            const clickAction = isLoggedIn ? `activeCardForPaste=${i}; document.getElementById('file-${i}').click()` : '';
-            const mouseOverAction = isLoggedIn ? `activeCardForPaste=${i}` : '';
-
-            // Zeige den Löschen-Button nur wenn ein Bild vorhanden und der User eingeloggt ist
-            const showDeleteBtn = isLoggedIn && cardData.img;
-
-            scene.innerHTML = `
-                <div class="card" id="card-${i}">
-                    <!-- VORDERSEITE -->
-                    <div class="card-face card-front">
-                        <div>
-                            <div class="card-title">Slot #${i + 1} — ${catName}</div>
-
-                            <div class="image-container ${editableClass}" id="dropZone-${i}" 
-                                 onclick="${clickAction}"
-                                 onmouseover="${mouseOverAction}">
-                                <div class="image-placeholder" id="placeholder-${i}" style="${cardData.img ? 'display:none;' : ''}">
-                                    <strong>${isLoggedIn ? 'Bild einfügen' : 'Kein Bild hinterlegt'}</strong><br>
-                                    ${isLoggedIn ? 'Strg+V / Drag&Drop / Klick' : 'Nur im eingeloggten Modus änderbar'}
-                                </div>
-                                <img id="img-${i}" src="${cardData.img || ''}" style="${cardData.img ? 'display:block;' : 'display:none;'}">
-                                ${showDeleteBtn ? `<button onclick="event.stopPropagation(); removeCardImage(${i});" style="position: absolute; top: 6px; right: 6px; background: rgba(255, 30, 39, 0.85); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: bold; cursor: pointer; z-index: 5;">✕ Bild entfernen</button>` : ''}
-                            </div>
-                            <input type="file" id="file-${i}" class="file-input" accept="image/*" onchange="handleFileSelect(event, ${i})">
-
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Hersteller</label>
-                                    <input type="text" ${readonlyAttr} value="${cardData.brand || ''}" placeholder="-" onchange="updateData(${i}, 'brand', this.value)">
-                                </div>
-                                <div class="form-group">
-                                    <label>Modell</label>
-                                    <input type="text" ${readonlyAttr} value="${cardData.model || ''}" placeholder="-" onchange="updateData(${i}, 'model', this.value)">
-                                </div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Sitzplätze</label>
-                                    <input type="text" ${readonlyAttr} value="${cardData.seats || ''}" placeholder="-" onchange="updateData(${i}, 'seats', this.value)">
-                                </div>
-                                <div class="form-group">
-                                    <label>Verkaufspreis ($)</label>
-                                    <input type="text" ${readonlyAttr} class="price-input" value="${cardData.price || ''}" placeholder="$ 0" onchange="updateData(${i}, 'price', this.value)">
-                                </div>
-                            </div>
-                        </div>
-
-                        <button class="btn-flip" onclick="toggleFlip(${i})">Fahrzeugdetails ➔</button>
-                    </div>
-
-                    <!-- RÜCKSEITE -->
-                    <div class="card-face card-back">
-                        <div>
-                            <div class="card-title">Spezifikationen</div>
-
-                            <div class="form-group">
-                                <label>Kilometerstand (KM)</label>
-                                <input type="text" ${readonlyAttr} value="${cardData.km || ''}" placeholder="-" onchange="updateData(${i}, 'km', this.value)">
-                            </div>
-
-                            <div class="form-group">
-                                <label>Kofferraumvolumen (KG)</label>
-                                <input type="text" ${readonlyAttr} value="${cardData.trunk || ''}" placeholder="-" onchange="updateData(${i}, 'trunk', this.value)">
-                            </div>
-
-                            <div class="form-group">
-                                <label>Höchstgeschwindigkeit</label>
-                                <input type="text" ${readonlyAttr} value="${cardData.speed || ''}" placeholder="-" onchange="updateData(${i}, 'speed', this.value)">
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Baujahr</label>
-                                    <input type="text" ${readonlyAttr} value="${cardData.year || ''}" placeholder="-" onchange="updateData(${i}, 'year', this.value)">
-                                </div>
-                                <div class="form-group">
-                                    <label>Antrieb</label>
-                                    <input type="text" ${readonlyAttr} value="${cardData.drive || ''}" placeholder="-" onchange="updateData(${i}, 'drive', this.value)">
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Kraftstoff / Motor</label>
-                                <input type="text" ${readonlyAttr} value="${cardData.fuel || ''}" placeholder="-" onchange="updateData(${i}, 'fuel', this.value)">
-                            </div>
-                        </div>
-
-                        <button class="btn-flip" onclick="toggleFlip(${i})">➔ Zurück zur Übersicht</button>
-                    </div>
-                </div>
-            `;
-            grid.appendChild(scene);
-            if (isLoggedIn) setupDragAndDrop(i);
+        body {
+            background-color: #0d0d0d;
+            color: #ffffff;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
         }
-    }
 
-    function toggleFlip(index) {
-        document.getElementById(`card-${index}`).classList.toggle('is-flipped');
-    }
+        /* Sidebar Styling */
+        .sidebar {
+            width: 260px;
+            background-color: #141414;
+            border-right: 2px solid #ff1e27;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-shadow: 4px 0 15px rgba(255, 30, 39, 0.15);
+        }
 
-    // Speichert Daten lokal und überträgt sie live an die Datenbank für alle Nutzer
-    function updateData(index, key, value) {
-        if (!isLoggedIn) return;
-        const catName = categories[currentCategoryIndex];
-        if (!appData[catName][index]) appData[catName][index] = {};
-        appData[catName][index][key] = value;
+        .brand {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff1e27;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            text-align: center;
+            border-bottom: 1px solid #262626;
+            padding-bottom: 15px;
+        }
+
+        .category-list {
+            list-style: none;
+            overflow-y: auto;
+            flex-grow: 1;
+            padding-right: 5px;
+        }
+
+        .category-list::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .category-list::-webkit-scrollbar-thumb {
+            background: #ff1e27;
+            border-radius: 3px;
+        }
+
+        .category-item {
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background-color: #1a1a1a;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            font-weight: 500;
+            border-left: 3px solid transparent;
+        }
+
+        .category-item:hover, .category-item.active {
+            background-color: #262626;
+            color: #ff1e27;
+            border-left-color: #ff1e27;
+        }
+
+        .login-btn {
+            background-color: #ff1e27;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .login-btn:hover {
+            background-color: #d6151d;
+        }
+
+        .login-btn.logged-in {
+            background-color: #28a745;
+        }
+
+        /* Main Content Styling */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #0d0d0d;
+        }
+
+        .top-bar {
+            height: 70px;
+            background-color: #141414;
+            border-bottom: 1px solid #262626;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 30px;
+        }
+
+        .top-bar h1 {
+            font-size: 20px;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            font-size: 12px;
+            background: #262626;
+            padding: 6px 12px;
+            border-radius: 20px;
+            color: #aaa;
+            border: 1px solid #333;
+        }
+
+        .clock-box {
+            text-align: right;
+        }
+
+        .clock-time {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff1e27;
+            font-family: monospace;
+        }
+
+        .clock-date {
+            font-size: 11px;
+            color: #888;
+        }
+
+        /* Grid & Cards Styling */
+        .cards-container {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        /* 3D Flip Card Effect */
+        .scene {
+            perspective: 1000px;
+            height: 480px;
+        }
+
+        .card {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+
+        .card.is-flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            background-color: #141414;
+            border: 1px solid #262626;
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+
+        .card-front {
+            z-index: 2;
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #ff1e27;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #262626;
+            padding-bottom: 8px;
+        }
+
+        .image-container {
+            width: 100%;
+            height: 160px;
+            background-color: #1a1a1a;
+            border: 2px dashed #333;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .image-container.editable {
+            cursor: pointer;
+            border-color: #555;
+        }
+
+        .image-container.editable:hover {
+            border-color: #ff1e27;
+        }
+
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .image-placeholder {
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            padding: 10px;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .form-group {
+            flex: 1;
+            margin-bottom: 8px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+        }
+
+        .form-group input {
+            width: 100%;
+            background-color: #1a1a1a;
+            border: 1px solid #262626;
+            color: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .form-group input:focus {
+            border-color: #ff1e27;
+            outline: none;
+        }
+
+        .form-group input:disabled {
+            background-color: #111;
+            color: #aaa;
+            border-color: #1f1f1f;
+        }
+
+        .price-input {
+            color: #ff1e27 !important;
+            font-weight: bold;
+        }
+
+        .btn-flip {
+            background: #262626;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+
+        .btn-flip:hover {
+            background: #ff1e27;
+            border-color: #ff1e27;
+        }
+
+        /* Modal Styling */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background-color: #141414;
+            border: 1px solid #ff1e27;
+            border-radius: 8px;
+            padding: 30px;
+            width: 350px;
+            box-shadow: 0 0 20px rgba(255, 30, 39, 0.3);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff1e27;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .modal-btn {
+            width: 100%;
+            background-color: #ff1e27;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div>
+            <div class="brand">Fresh Cars</div>
+            <ul class="category-list" id="categoryList"></ul>
+        </div>
+        <button class="login-btn" id="loginBtn" onclick="openLoginModal()">Anmeldung</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="top-bar">
+            <div>
+                <h1 id="currentCategoryTitle">Kompaktwagen</h1>
+                <span class="status-badge" id="statusBadge">Modus: Nur Ansicht</span>
+            </div>
+            <div class="clock-box">
+                <div class="clock-time" id="clockTime">00:00:00</div>
+                <div class="clock-date" id="clockDate">01.01.2026</div>
+            </div>
+        </div>
+
+        <div class="cards-container">
+            <div class="cards-grid" id="cardsGrid"></div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <div class="modal-title">Autohaus Login</div>
+            <div class="form-group">
+                <label>Benutzername</label>
+                <input type="text" id="userInput" placeholder="Benutzername eingeben">
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Passwort</label>
+                <input type="password" id="passInput" placeholder="Passwort eingeben">
+            </div>
+            <button class="modal-btn" onclick="handleLogin()">Einloggen</button>
+            <button class="btn-flip" style="width: 100%; margin-top: 10px;" onclick="closeLoginModal()">Abbrechen</button>
+        </div>
+    </div>
+
+    <script>
+        // -------------------------------------------------------------
+        // 1. FIREBASE CONFIGURATION
+        // -------------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6CzBYV1CpHHgc1fjl9JL08z2kWqesEgA",
+            authDomain: "freshcarsmdt.firebaseapp.com",
+            databaseURL: "https://freshcarsmdt-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "freshcarsmdt",
+            storageBucket: "freshcarsmdt.firebasestorage.app",
+            messagingSenderId: "37931742621",
+            appId: "1:37931742621:web:db45cd282e8e12a5cd2b74",
+            measurementId: "G-GG6TZ2ZG01"
+        };
+
+        let useLiveFirebase = false;
+        let dbRef = null;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            dbRef = firebase.database().ref('fresh_cars_mdt');
+            useLiveFirebase = true;
+        } catch(e) {
+            console.warn("Firebase-Verbindung schlug fehl.", e);
+        }
+
+        // -------------------------------------------------------------
+        // 2. LIVE-UHR
+        // -------------------------------------------------------------
+        function updateClock() {
+            const now = new Date();
+            const hrs = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+
+            document.getElementById('clockTime').innerText = `${hrs}:${mins}:${secs}`;
+            document.getElementById('clockDate').innerText = `${day}.${month}.${year}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // -------------------------------------------------------------
+        // 3. ANWENDUNGSDATEN & KATEGORIEN
+        // -------------------------------------------------------------
+        const categories = [
+            "Kompaktwagen", "Klassiker", "Sportwagen", "Supersportwagen", 
+            "Hypercars", "SUVs", "Offroad", "Limousinen", "Coupés", 
+            "Muscle Cars", "Tuner", "Vans & Transporter", "Motorräder", 
+            "Nutzfahrzeuge", "Einsatzfahrzeuge"
+        ];
+
+        let currentCategoryIndex = 0;
+        let activeCardForPaste = null;
         
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+        // Dauerhafter Login via localStorage
+        let isLoggedIn = localStorage.getItem('fresh_cars_logged_in') === 'true';
+
+        const STORAGE_KEY = 'fresh_cars_mdt_data';
+        let appData = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
         if (useLiveFirebase && dbRef) {
-            dbRef.set(appData);
-        }
-    }
-
-    function setCardImage(index, base64) {
-        if (!isLoggedIn) return;
-        const img = document.getElementById(`img-${index}`);
-        const placeholder = document.getElementById(`placeholder-${index}`);
-        img.src = base64;
-        img.style.display = 'block';
-        placeholder.style.display = 'none';
-        updateData(index, 'img', base64);
-    }
-
-    // Neue Funktion: Entfernt das Bild nur im eingeloggt-Zustand
-    function removeCardImage(index) {
-        if (!isLoggedIn) return;
-        updateData(index, 'img', '');
-        renderCards();
-    }
-
-    document.addEventListener('paste', (e) => {
-        if (!isLoggedIn || activeCardForPaste === null) return;
-        const items = e.clipboardData.items;
-        for (let item of items) {
-            if (item.type.indexOf('image') !== -1) {
-                const blob = item.getAsFile();
-                const reader = new FileReader();
-                reader.onload = (event) => setCardImage(activeCardForPaste, event.target.result);
-                reader.readAsDataURL(blob);
-            }
-        }
-    });
-
-    function handleFileSelect(e, index) {
-        if (!isLoggedIn) return;
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => setCardImage(index, event.target.result);
-            reader.readAsDataURL(file);
-        }
-    }
-
-    function setupDragAndDrop(index) {
-        setTimeout(() => {
-            const zone = document.getElementById(`dropZone-${index}`);
-            if (!zone) return;
-
-            zone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                zone.classList.add('dragover');
-            });
-
-            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-
-            zone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                zone.classList.remove('dragover');
-                if (!isLoggedIn) return;
-                const file = e.dataTransfer.files[0];
-                if (file && file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (event) => setCardImage(index, event.target.result);
-                    reader.readAsDataURL(file);
+            dbRef.on('value', (snapshot) => {
+                const val = snapshot.val();
+                if (val) {
+                    appData = val;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+                    renderCards();
                 }
             });
-        }, 50);
-    }
-
-    function openLoginModal() {
-        if (isLoggedIn) {
-            isLoggedIn = false;
-            document.getElementById('loginBtn').innerText = 'Anmeldung';
-            document.getElementById('loginBtn').classList.remove('logged-in');
-            document.getElementById('statusBadge').innerText = 'Modus: Nur Ansicht';
-            renderCards();
-            return;
         }
-        document.getElementById('loginModal').style.display = 'flex';
-    }
 
-    function closeLoginModal() {
-        document.getElementById('loginModal').style.display = 'none';
-        document.getElementById('userInput').value = '';
-        document.getElementById('passInput').value = '';
-    }
-
-    function handleLogin() {
-        const user = document.getElementById('userInput').value;
-        const pass = document.getElementById('passInput').value;
-
-        if (user === 'Autohaus' && pass === 'Autohaus1234') {
-            isLoggedIn = true;
-            document.getElementById('loginBtn').innerText = 'Abmelden (Autohaus)';
-            document.getElementById('loginBtn').classList.add('logged-in');
-            document.getElementById('statusBadge').innerText = 'Modus: Bearbeitung aktiv';
-            closeLoginModal();
-            renderCards();
-        } else {
-            alert('Falscher Benutzername oder falsches Passwort!');
+        function updateLoginUI() {
+            const loginBtn = document.getElementById('loginBtn');
+            const statusBadge = document.getElementById('statusBadge');
+            
+            if (isLoggedIn) {
+                loginBtn.innerText = 'Abmelden (Autohaus)';
+                loginBtn.classList.add('logged-in');
+                statusBadge.innerText = 'Modus: Bearbeitung aktiv';
+            } else {
+                loginBtn.innerText = 'Anmeldung';
+                loginBtn.classList.remove('logged-in');
+                statusBadge.innerText = 'Modus: Nur Ansicht';
+            }
         }
-    }
 
-    initCategories();
-</script>
+        function initCategories() {
+            const listEl = document.getElementById('categoryList');
+            listEl.innerHTML = '';
+            
+            categories.forEach((cat, index) => {
+                const li = document.createElement('li');
+                li.className = `category-item ${index === 0 ? 'active' : ''}`;
+                li.innerText = cat;
+                li.onclick = () => selectCategory(index);
+                listEl.appendChild(li);
+            });
+
+            updateLoginUI();
+            selectCategory(0);
+        }
+
+        function selectCategory(index) {
+            currentCategoryIndex = index;
+            document.querySelectorAll('.category-item').forEach((item, i) => {
+                item.classList.toggle('active', i === index);
+            });
+
+            document.getElementById('currentCategoryTitle').innerText = categories[index];
+            renderCards();
+        }
+
+        function renderCards() {
+            const grid = document.getElementById('cardsGrid');
+            grid.innerHTML = '';
+
+            const catName = categories[currentCategoryIndex];
+            if (!appData[catName]) {
+                appData[catName] = Array(15).fill(null).map(() => ({}));
+            }
+
+            for (let i = 0; i < 15; i++) {
+                const cardData = appData[catName][i] || {};
+                const scene = document.createElement('div');
+                scene.className = 'scene';
+
+                const readonlyAttr = isLoggedIn ? '' : 'disabled';
+                const editableClass = isLoggedIn ? 'editable' : '';
+                const clickAction = isLoggedIn ? `activeCardForPaste=${i}; document.getElementById('file-${i}').click()` : '';
+                const mouseOverAction = isLoggedIn ? `activeCardForPaste=${i}` : '';
+
+                const showDeleteBtn = isLoggedIn && cardData.img;
+
+                scene.innerHTML = `
+                    <div class="card" id="card-${i}">
+                        <!-- VORDERSEITE -->
+                        <div class="card-face card-front">
+                            <div>
+                                <div class="card-title">Slot #${i + 1} — ${catName}</div>
+
+                                <div class="image-container ${editableClass}" id="dropZone-${i}" 
+                                     onclick="${clickAction}"
+                                     onmouseover="${mouseOverAction}">
+                                    <div class="image-placeholder" id="placeholder-${i}" style="${cardData.img ? 'display:none;' : ''}">
+                                        <strong>${isLoggedIn ? 'Bild einfügen' : 'Kein Bild hinterlegt'}</strong><br>
+                                        ${isLoggedIn ? 'Strg+V / Drag&Drop / Klick' : 'Nur im eingeloggten Modus änderbar'}
+                                    </div>
+                                    <img id="img-${i}" src="${cardData.img || ''}" style="${cardData.img ? 'display:block;' : 'display:none;'}">
+                                    ${showDeleteBtn ? `<button onclick="event.stopPropagation(); removeCardImage(${i});" style="position: absolute; top: 6px; right: 6px; background: rgba(255, 30, 39, 0.85); color: #fff; border: none; border-radius: 4px; padding: 4px 8px; font-size: 10px; font-weight: bold; cursor: pointer; z-index: 5;">✕ Bild entfernen</button>` : ''}
+                                </div>
+                                <input type="file" id="file-${i}" class="file-input" accept="image/*" onchange="handleFileSelect(event, ${i})">
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Hersteller</label>
+                                        <input type="text" ${readonlyAttr} value="${cardData.brand || ''}" placeholder="-" onchange="updateData(${i}, 'brand', this.value)">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Modell</label>
+                                        <input type="text" ${readonlyAttr} value="${cardData.model || ''}" placeholder="-" onchange="updateData(${i}, 'model', this.value)">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Sitzplätze</label>
+                                        <input type="text" ${readonlyAttr} value="${cardData.seats || ''}" placeholder="-" onchange="updateData(${i}, 'seats', this.value)">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Verkaufspreis ($)</label>
+                                        <input type="text" ${readonlyAttr} class="price-input" value="${cardData.price || ''}" placeholder="$ 0" onchange="updateData(${i}, 'price', this.value)">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button class="btn-flip" onclick="toggleFlip(${i})">Fahrzeugdetails ➔</button>
+                        </div>
+
+                        <!-- RÜCKSEITE -->
+                        <div class="card-face card-back">
+                            <div>
+                                <div class="card-title">Spezifikationen</div>
+
+                                <div class="form-group">
+                                    <label>Kilometerstand (KM)</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.km || ''}" placeholder="-" onchange="updateData(${i}, 'km', this.value)">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Kofferraumvolumen (KG)</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.trunk || ''}" placeholder="-" onchange="updateData(${i}, 'trunk', this.value)">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Höchstgeschwindigkeit</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.speed || ''}" placeholder="-" onchange="updateData(${i}, 'speed', this.value)">
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Baujahr</label>
+                                        <input type="text" ${readonlyAttr} value="${cardData.year || ''}" placeholder="-" onchange="updateData(${i}, 'year', this.value)">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Antrieb</label>
+                                        <input type="text" ${readonlyAttr} value="${cardData.drive || ''}" placeholder="-" onchange="updateData(${i}, 'drive', this.value)">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label>Kraftstoff / Motor</label>
+                                    <input type="text" ${readonlyAttr} value="${cardData.fuel || ''}" placeholder="-" onchange="updateData(${i}, 'fuel', this.value)">
+                                </div>
+                            </div>
+
+                            <button class="btn-flip" onclick="toggleFlip(${i})">➔ Zurück zur Übersicht</button>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(scene);
+                if (isLoggedIn) setupDragAndDrop(i);
+            }
+        }
+
+        function toggleFlip(index) {
+            document.getElementById(`card-${index}`).classList.toggle('is-flipped');
+        }
+
+        function updateData(index, key, value) {
+            if (!isLoggedIn) return;
+            const catName = categories[currentCategoryIndex];
+            if (!appData[catName][index]) appData[catName][index] = {};
+            appData[catName][index][key] = value;
+            
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+
+            if (useLiveFirebase && dbRef) {
+                dbRef.set(appData);
+            }
+        }
+
+        function setCardImage(index, base64) {
+            if (!isLoggedIn) return;
+            updateData(index, 'img', base64);
+            renderCards();
+        }
+
+        function removeCardImage(index) {
+            if (!isLoggedIn) return;
+            updateData(index, 'img', '');
+            renderCards();
+        }
+
+        document.addEventListener('paste', (e) => {
+            if (!isLoggedIn || activeCardForPaste === null) return;
+            const items = e.clipboardData.items;
+            for (let item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = (event) => setCardImage(activeCardForPaste, event.target.result);
+                    reader.readAsDataURL(blob);
+                }
+            }
+        });
+
+        function handleFileSelect(e, index) {
+            if (!isLoggedIn) return;
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => setCardImage(index, event.target.result);
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function setupDragAndDrop(index) {
+            setTimeout(() => {
+                const zone = document.getElementById(`dropZone-${index}`);
+                if (!zone) return;
+
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    zone.classList.add('dragover');
+                });
+
+                zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('dragover');
+                    if (!isLoggedIn) return;
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => setCardImage(index, event.target.result);
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }, 50);
+        }
+
+        function openLoginModal() {
+            if (isLoggedIn) {
+                isLoggedIn = false;
+                localStorage.setItem('fresh_cars_logged_in', 'false');
+                updateLoginUI();
+                renderCards();
+                return;
+            }
+            document.getElementById('loginModal').style.display = 'flex';
+        }
+
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('userInput').value = '';
+            document.getElementById('passInput').value = '';
+        }
+
+        function handleLogin() {
+            const user = document.getElementById('userInput').value;
+            const pass = document.getElementById('passInput').value;
+
+            if (user === 'Autohaus' && pass === 'Autohaus1234') {
+                isLoggedIn = true;
+                localStorage.setItem('fresh_cars_logged_in', 'true');
+                updateLoginUI();
+                closeLoginModal();
+                renderCards();
+            } else {
+                alert('Falscher Benutzername oder falsches Passwort!');
+            }
+        }
+
+        initCategories();
+    </script>
+</body>
+</html>
